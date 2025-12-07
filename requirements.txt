@@ -4,4 +4,3 @@ pydantic==2.5.1
 python-dotenv==1.0.0
 requests==2.31.0
 supabase==2.5.1
-aiofiles==23.1.1
