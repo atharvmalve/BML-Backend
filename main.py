@@ -356,44 +356,95 @@ def create_session():
 
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat(req: ChatRequest):
+from fastapi import Request
 
-    # Validate session exists
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: Request):
+
+    # -----------------------------------------------------
+    # 1) Accept ANY JSON structure (Fixes WIX → 422 errors)
+    # -----------------------------------------------------
+    try:
+        data = await request.json()
+    except:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    print("RAW WIX PAYLOAD:", data)
+
+    # Extract session_id from ANY possible key
+    session_id = (
+        data.get("session_id")
+        or data.get("sessionId")
+        or data.get("session")
+        or data.get("id")
+    )
+
+    # Extract message from ANY possible key
+    message = (
+        data.get("message")
+        or data.get("text")
+        or data.get("input")
+        or data.get("prompt")
+        or (data.get("body", {}).get("message") if isinstance(data.get("body"), dict) else None)
+        or (data.get("payload", {}).get("text") if isinstance(data.get("payload"), dict) else None)
+    )
+
+    if not session_id:
+        raise HTTPException(400, "Missing session_id")
+    if not message:
+        raise HTTPException(400, "Missing message")
+
+    # Create your original ChatRequest object
+    req = ChatRequest(session_id=session_id, message=message)
+
+    # -----------------------------------------------------
+    # 2) VALIDATE session
+    # -----------------------------------------------------
     sess = (
         supabase.table("chat_sessions")
         .select("*")
         .eq("id", req.session_id)
         .execute()
     )
-
-    if not sess.data:  # means no session found
+    if not sess.data:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    # Save user message
+    # -----------------------------------------------------
+    # 3) Save user message
+    # -----------------------------------------------------
     insert_chat_message(req.session_id, "user", req.message)
 
-    # Fetch chat history
+    # -----------------------------------------------------
+    # 4) Fetch chat history
+    # -----------------------------------------------------
     history_rows = fetch_chat_history(req.session_id)
 
-    # FORM CHECK
+    # -----------------------------------------------------
+    # 5) FORM CHECK
+    # -----------------------------------------------------
     if not is_form_filled(req.session_id):
-        # We let user chat but block the question
-        reply = "I'd love to answer that! But before I continue, could you please fill the form? It helps us share accurate details with you."
+        reply = (
+            "I'd love to answer that! But before I continue, could you please fill the form? "
+            "It helps us share accurate details with you."
+        )
         insert_chat_message(req.session_id, "assistant", reply)
         return ChatResponse(reply=reply, session_id=req.session_id)
 
-    # Convert to LLM message format
-    conversation_messages: List[Dict[str, str]] = []
-    for r in history_rows:
-        conversation_messages.append({
-            "role": r.get("role", "user"),
-            "content": r.get("message", "")
-        })
+    # -----------------------------------------------------
+    # 6) Convert to LLM format
+    # -----------------------------------------------------
+    conversation_messages = [
+        {"role": row.get("role", "user"), "content": row.get("message", "")}
+        for row in history_rows
+    ]
 
-    # Fetch KB and rank
+    # -----------------------------------------------------
+    # 7) Retrieve KB + rank docs
+    # -----------------------------------------------------
     all_kb = fetch_all_kb_entries()
-    ranked = rank_documents_by_query(req.message, all_kb, content_field="content", top_k=3)
+    ranked = rank_documents_by_query(
+        req.message, all_kb, content_field="content", top_k=3
+    )
 
     kb_texts = []
     for entry in ranked:
@@ -402,7 +453,9 @@ def chat(req: ChatRequest):
                 f"Title: {entry.title}\nContent: {entry.content}\n---\n"
             )
 
-    # Build system prompt
+    # -----------------------------------------------------
+    # 8) System prompt
+    # -----------------------------------------------------
     system_prompt_lines = [
         "You are a helpful website chatbot specialized for answering user queries about the site.",
         "Always use the knowledge base first if it contains the answer.",
@@ -416,12 +469,16 @@ def chat(req: ChatRequest):
 
     system_prompt = "\n".join(system_prompt_lines)
 
-    # Final messages for LLM
-    messages_for_llm: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    # -----------------------------------------------------
+    # 9) Final LLM messages
+    # -----------------------------------------------------
+    messages_for_llm = [{"role": "system", "content": system_prompt}]
     messages_for_llm.extend(conversation_messages[-50:])
     messages_for_llm.append({"role": "user", "content": req.message})
 
-    # Call OpenRouter
+    # -----------------------------------------------------
+    # 10) Call OpenRouter
+    # -----------------------------------------------------
     try:
         assistant_reply = call_openrouter_chat(
             messages_for_llm, model=OPENROUTER_MODEL
@@ -429,13 +486,17 @@ def chat(req: ChatRequest):
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"LLM call failed: {str(e)}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM call failed: {str(e)}"
+        )
 
-    # Save assistant message
+    # -----------------------------------------------------
+    # 11) Save assistant reply
+    # -----------------------------------------------------
     insert_chat_message(req.session_id, "assistant", assistant_reply)
 
     return ChatResponse(reply=assistant_reply, session_id=req.session_id)
-
 
 @app.get("/history/{session_id}")
 def history(session_id: str):
