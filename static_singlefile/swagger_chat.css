@@ -1,0 +1,7 @@
+
+/* Minimal chat-like tweaks for Swagger UI */
+.swagger-ui .topbar { background: #0b5fff; color: white; }
+.swagger-ui .info { background: #f5f7ff; border-radius: 8px; padding: 12px; }
+body { font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; }
+.swagger-ui .scheme-container { display:none; } /* hide try it auth */
+.swagger-ui .opblock-summary { border-radius: 8px; }
