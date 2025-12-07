@@ -62,7 +62,8 @@ app.mount("/static_singlefile", StaticFiles(directory=STATIC_DIR), name="static_
 
 origins = [
     "http://localhost:3000",  # your frontend origin (adjust as needed)
-    "https://your-wix-site.com",  # Wix domain
+    "https://your-wix-site.com", 
+   'https://bml-frontend-eta.vercel.app/', # Wix domain
 ]
 
 app.add_middleware(
