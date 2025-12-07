@@ -19,10 +19,11 @@ from fastapi.middleware.cors import CORSMiddleware
 # Load environment variables from .env
 load_dotenv()
 
-SUPABASE_URL = "https://iafonytwysnxwkeuowew.supabase.co"
-SUPABASE_KEY = "sb_publishable_2hMcFWl9a2R0PhkkudsA_w_KxZfsFvT"
-OPENROUTER_API_KEY = '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'
-OPENROUTER_MODEL = "openai/gpt-4.1-mini"
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4.1-mini")
 
 if not SUPABASE_URL or not SUPABASE_KEY or not OPENROUTER_API_KEY:
     raise RuntimeError(
